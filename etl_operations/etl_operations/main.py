@@ -49,11 +49,11 @@ def run(argv=None):
                      | 'ReadCore' >> ReadFromDB(
                          source_config=SourceConfiguration(
                              drivername='postgresql+psycopg2',
-                             host='',
-                             port=0,
-                             username='',
-                             password='',
-                             database='',
+                             host='35.222.134.244',
+                             port=5432,
+                             username='postgres',
+                             password='u06ttJ6q401yx5Dz',
+                             database='valiu_core',
                              create_if_missing=False
                          ),
                          table_name='transaction',
@@ -63,7 +63,7 @@ def run(argv=None):
 
         read_auth = (p
                      | 'Read Users' >> ReadFromMongoDB(
-                         uri='',
+                         uri='mongodb://35.225.6.111:27017',
                          db='auth',
                          coll='users'
                      )
