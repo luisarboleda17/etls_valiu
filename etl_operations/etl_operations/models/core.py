@@ -1,6 +1,6 @@
 
-import datetime
-from marshmallow import Schema, fields, EXCLUDE, validate, pre_load
+from marshmallow import Schema, fields, EXCLUDE, validate
+from etl_operations.models.serializer import AutoParsedDate
 
 transactions_table_schema = {
     'fields': [
@@ -30,6 +30,8 @@ transactions_table_schema = {
         {'name': 'wallet_dst', 'type': 'STRING', 'mode': 'NULLABLE'},
         {'name': 'wallet_src', 'type': 'STRING', 'mode': 'NULLABLE'},
         {'name': 'transaction_type', 'type': 'STRING', 'mode': 'REQUIRED'},
+        {'name': 'user_first_name', 'type': 'STRING', 'mode': 'NULLABLE'},
+        {'name': 'user_created_at', 'type': 'DATETIME', 'mode': 'NULLABLE'}
     ]
 }
 transactions_table_partitioning = {
@@ -40,23 +42,6 @@ transactions_table_partitioning = {
 class TransactionSchema(Schema):
     class Meta:
         unknown = EXCLUDE
-
-    def __parse_from_date_object__(self, date):
-        if isinstance(date, datetime.date):
-            return datetime.datetime.combine(date, datetime.datetime.min.time()).isoformat()
-        elif isinstance(date, datetime.datetime):
-            return date.isoformat()
-        else:
-            return date
-
-    @pre_load()
-    def parse_dates_object(self, data, many, **kwargs):
-        return {
-            **data,
-            'created_at': self.__parse_from_date_object__(data['created_at']),
-            'updated_at': self.__parse_from_date_object__(data['updated_at']),
-            'sync_date': self.__parse_from_date_object__(data['sync_date'])
-        }
 
     id = fields.Str(required=True)
     id2 = fields.Str(required=False, allow_none=True, missing=None)
@@ -69,15 +54,15 @@ class TransactionSchema(Schema):
     asset_dst = fields.Str(required=False, allow_none=True, missing=None)
     asset_src = fields.Str(required=False, allow_none=True, missing=None)
     contact_dst = fields.Str(required=False, allow_none=True, missing=None)
-    created_at = fields.DateTime(required=True)
+    created_at = AutoParsedDate(required=True)
     description = fields.Str(required=False, allow_none=True, missing=None)
     order_id = fields.Str(required=False, allow_none=True, missing=None)
     service_name = fields.Str(required=False, allow_none=True, missing=None)
     short_id = fields.Str(required=False, allow_none=True, missing=None)
     state = fields.Str(required=False, allow_none=True, missing=None)
-    sync_date = fields.DateTime(required=False, allow_none=True, missing=None)
+    sync_date = AutoParsedDate(required=False, allow_none=True, missing=None)
     type = fields.Str(required=False, allow_none=True, missing=None)
-    updated_at = fields.DateTime(required=False, allow_none=True, missing=None)
+    updated_at = AutoParsedDate(required=False, allow_none=True, missing=None)
     user_id = fields.Str(required=True)
     user_type = fields.Str(required=False, allow_none=True, missing=None)
     v = fields.Str(required=False, allow_none=True, missing=None)
@@ -87,3 +72,5 @@ class TransactionSchema(Schema):
         required=True,
         validate=validate.OneOf(["cash_in", "cash_out", "p2p"])
     )
+    user_first_name = fields.Str(required=False, allow_none=True, missing=None)
+    user_created_at = AutoParsedDate(required=False, allow_none=True, missing=None)
