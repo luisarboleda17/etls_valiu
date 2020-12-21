@@ -5,7 +5,8 @@ PACKAGE_VERSION = '0.0.1'
 REQUIRED_PACKAGES = [
     'beam_nuggets',
     'psycopg2-binary',
-    'marshmallow'
+    'marshmallow',
+    'beam-mysql-connector'
 ]
 
 setuptools.setup(

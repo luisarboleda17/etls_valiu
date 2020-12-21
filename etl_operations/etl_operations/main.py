@@ -4,10 +4,15 @@ import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.io.mongodbio import ReadFromMongoDB
 from beam_nuggets.io.relational_db import ReadFromDB, SourceConfiguration
+from beam_mysql.connector import splitters
+from beam_mysql.connector.io import ReadFromMySQL
 from etl_operations.transforms.left_join import LeftJoin
 from etl_operations.transforms.transactions import filter_currency_operation, filter_transaction, TransformTransaction
 from etl_operations.transforms.users import filter_user, TransformUser
+from etl_operations.transforms.remittances import TransformRemittance, filter_remittance, MergeRemittancesUsers
 from etl_operations.models.core import transactions_table_partitioning, transactions_table_schema
+from etl_operations.models.auth import users_table_schema, users_table_partitioning
+from etl_operations.models.remittances import remittances_table_partitioning, remittances_table_schema
 
 
 def run(argv=None):
@@ -29,6 +34,8 @@ def run(argv=None):
     project_id = pipeline_options.display_data()['project']
 
     with beam.Pipeline(options=pipeline_options) as p:
+        # Reads from data sources
+
         read_core = (p
                      | 'ReadCore' >> ReadFromDB(
                          source_config=SourceConfiguration(
@@ -54,7 +61,49 @@ def run(argv=None):
                      | 'TransformUsers' >> beam.ParDo(TransformUser())
                      | 'FilterUsers' >> beam.Filter(filter_user))
 
+        read_remittances = (p
+                            | 'ReadRemittances' >> ReadFromMySQL(
+                                query='SELECT * FROM valiu_remittances.remittance',
+                                host=known_args.remittances_host,
+                                database=known_args.remittances_database,
+                                user=known_args.remittances_username,
+                                password=known_args.remittances_password,
+                                port=known_args.remittances_port,
+                                splitter=splitters.NoSplitter()
+                            )
+                            | 'TransformRemittances' >> beam.ParDo(TransformRemittance())
+                            | 'FilterRemittances' >> beam.Filter(filter_remittance))
+
+        # Merges
+
         merged_transactions = ((read_core, read_auth) | 'MergeTransactionsUsers' >> LeftJoin('id2', 'id', 'user_'))
+
+        merged_remittances = ((read_remittances, read_auth)
+                              | 'MergeRemittanceUsers' >> MergeRemittancesUsers())
+
+        # Writes to BigQuery
+
+        write_users = (read_auth
+                       | 'WriteUsers' >> beam.io.WriteToBigQuery(
+                           table='auth_users',
+                           dataset='auth',
+                           project=project_id,
+                           create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+                           write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+                           schema=users_table_schema,
+                           additional_bq_parameters=users_table_partitioning
+                       ))
+
+        write_remittances = (merged_remittances
+                             | 'WriteRemittances' >> beam.io.WriteToBigQuery(
+                                 table='remittances_movements',
+                                 dataset='remittances',
+                                 project=project_id,
+                                 create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+                                 write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+                                 schema=remittances_table_schema,
+                                 additional_bq_parameters=remittances_table_partitioning
+                             ))
 
         write_transactions_cash_in = (merged_transactions
                                       | 'FilterCashIn' >> beam.Filter(filter_currency_operation, 'COP', 'USDv')
