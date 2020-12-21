@@ -7,88 +7,84 @@ from beam_nuggets.io.relational_db import ReadFromDB, SourceConfiguration
 from etl_operations.transforms.left_join import LeftJoin
 from etl_operations.transforms.transactions import filter_currency_operation, filter_transaction, TransformTransaction
 from etl_operations.transforms.users import filter_user
+from etl_operations.models.core import transactions_table_partitioning, transactions_table_schema
 
 
 def run(argv=None):
     parser = argparse.ArgumentParser()
+    parser.add_argument('--core_host', dest='core_host', type=str)
+    parser.add_argument('--core_port', dest='core_port', type=int)
+    parser.add_argument('--core_username', dest='core_username', type=str)
+    parser.add_argument('--core_password', dest='core_password', type=str)
+    parser.add_argument('--core_database', dest='core_database', type=str)
+    parser.add_argument('--auth_uri', dest='auth_uri', type=str)
+    parser.add_argument('--auth_database', dest='auth_database', type=str)
     known_args, pipeline_args = parser.parse_known_args(argv)
     pipeline_options = PipelineOptions(pipeline_args)
-
-    table_schema = {
-        'fields': [
-            {'name': 'id', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'id2', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'account_id_dst', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'account_id_src', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'amount_dst', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'amount_dst_usd', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'amount_src', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'amount_src_usd', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'asset_dst', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'asset_src', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'contact_dst', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'created_at', 'type': 'DATETIME', 'mode': 'NULLABLE'},
-            {'name': 'description', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'order_id', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'service_name', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'short_id', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'state', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'sync_date', 'type': 'DATETIME', 'mode': 'NULLABLE'},
-            {'name': 'type', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'updated_at', 'type': 'DATETIME', 'mode': 'NULLABLE'},
-            {'name': 'user_id', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'user_type', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'v', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'wallet_dst', 'type': 'STRING', 'mode': 'NULLABLE'},
-            {'name': 'wallet_src', 'type': 'STRING', 'mode': 'NULLABLE'},
-        ]
-    }
+    project_id = pipeline_options.display_data()['project']
 
     with beam.Pipeline(options=pipeline_options) as p:
         read_core = (p
                      | 'ReadCore' >> ReadFromDB(
                          source_config=SourceConfiguration(
                              drivername='postgresql+psycopg2',
-                             host='35.222.134.244',
-                             port=5432,
-                             username='postgres',
-                             password='u06ttJ6q401yx5Dz',
-                             database='valiu_core',
+                             host=known_args.core_host,
+                             port=known_args.core_port,
+                             username=known_args.core_username,
+                             password=known_args.core_password,
+                             database=known_args.core_database,
                              create_if_missing=False
                          ),
                          table_name='transaction',
-                         query='SELECT * FROM transaction LIMIT 10'
+                         query='SELECT * FROM transaction'
                      )
                      | 'FilterTransactions' >> beam.Filter(filter_transaction))
 
         read_auth = (p
                      | 'Read Users' >> ReadFromMongoDB(
-                         uri='mongodb://35.225.6.111:27017',
-                         db='auth',
+                         uri=known_args.auth_uri,
+                         db=known_args.auth_database,
                          coll='users'
                      )
                      | 'FilterUsers' >> beam.Filter(filter_user))
 
-        ((read_core, read_auth)
-                                      | LeftJoin('id2', '_id')
-                                      | 'FilterCashIn' >> beam.Filter(filter_currency_operation, 'USDv', 'USDv')
-                                      | 'TransformDate' >> beam.ParDo(TransformTransaction())
+        merged_transactions = ((read_core, read_auth) | 'MergeTransactionsUsers' >> LeftJoin('id2', '_id'))
+
+        write_transactions_cash_in = (merged_transactions
+                                      | 'FilterCashIn' >> beam.Filter(filter_currency_operation, 'COP', 'USDv')
+                                      | 'CleanTransactionsCashIn' >> beam.ParDo(TransformTransaction('cash_in'))
                                       | 'WriteCashIn' >> beam.io.WriteToBigQuery(
-                                          table='core_transactions',
+                                          table='core_cash_in',
                                           dataset='core',
-                                          project='',
+                                          project=project_id,
                                           create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
                                           write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-                                          schema=table_schema
+                                          schema=transactions_table_schema,
+                                          additional_bq_parameters=transactions_table_partitioning
                                       ))
 
+        write_transactions_cash_out = (merged_transactions
+                                       | 'FilterCashOut' >> beam.Filter(filter_currency_operation, 'USDv', 'VES')
+                                       | 'CleanTransactionsCashOut' >> beam.ParDo(TransformTransaction('cash_out'))
+                                       | 'WriteCashOut' >> beam.io.WriteToBigQuery(
+                                           table='core_cash_out',
+                                           dataset='core',
+                                           project=project_id,
+                                           create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+                                           write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+                                           schema=transactions_table_schema,
+                                           additional_bq_parameters=transactions_table_partitioning
+                                       ))
 
-        # write_transactions_cash_out = (core_transactions
-        #                                | 'FilterCashOut' >> beam.Filter(__filter_currency_operation__, 'USDv', 'VES'))
-        #
-        # write_transactions_p2p = (core_transactions
-        #                           | 'FilterP2P' >> beam.Filter(__filter_currency_operation__, 'USDv', 'USDv'))
-        #
-        # write_core_transactions = (core_transactions
-        #                            | beam.io.WriteToBigQuery(table='core_transactions', ))
-
+        write_transactions_p2p = (merged_transactions
+                                  | 'FilterP2P' >> beam.Filter(filter_currency_operation, 'USDv', 'USDv')
+                                  | 'CleanTransactionsP2P' >> beam.ParDo(TransformTransaction('p2p'))
+                                  | 'WriteP2P' >> beam.io.WriteToBigQuery(
+                                      table='core_p2p',
+                                      dataset='core',
+                                      project=project_id,
+                                      create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+                                      write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+                                      schema=transactions_table_schema,
+                                      additional_bq_parameters=transactions_table_partitioning
+                                  ))

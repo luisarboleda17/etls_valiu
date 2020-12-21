@@ -4,7 +4,8 @@ PACKAGE_NAME = 'etl_operations'
 PACKAGE_VERSION = '0.0.1'
 REQUIRED_PACKAGES = [
     'beam_nuggets',
-    'psycopg2-binary'
+    'psycopg2-binary',
+    'marshmallow'
 ]
 
 setuptools.setup(
