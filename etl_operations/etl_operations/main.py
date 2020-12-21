@@ -6,7 +6,7 @@ from apache_beam.io.mongodbio import ReadFromMongoDB
 from beam_nuggets.io.relational_db import ReadFromDB, SourceConfiguration
 from etl_operations.transforms.left_join import LeftJoin
 from etl_operations.transforms.transactions import filter_currency_operation, filter_transaction, TransformTransaction
-from etl_operations.transforms.users import filter_user
+from etl_operations.transforms.users import filter_user, TransformUser
 from etl_operations.models.core import transactions_table_partitioning, transactions_table_schema
 
 
@@ -17,6 +17,11 @@ def run(argv=None):
     parser.add_argument('--core_username', dest='core_username', type=str)
     parser.add_argument('--core_password', dest='core_password', type=str)
     parser.add_argument('--core_database', dest='core_database', type=str)
+    parser.add_argument('--remittances_host', dest='remittances_host', type=str)
+    parser.add_argument('--remittances_port', dest='remittances_port', type=int)
+    parser.add_argument('--remittances_username', dest='remittances_username', type=str)
+    parser.add_argument('--remittances_password', dest='remittances_password', type=str)
+    parser.add_argument('--remittances_database', dest='remittances_database', type=str)
     parser.add_argument('--auth_uri', dest='auth_uri', type=str)
     parser.add_argument('--auth_database', dest='auth_database', type=str)
     known_args, pipeline_args = parser.parse_known_args(argv)
@@ -46,9 +51,10 @@ def run(argv=None):
                          db=known_args.auth_database,
                          coll='users'
                      )
+                     | 'TransformUsers' >> beam.ParDo(TransformUser())
                      | 'FilterUsers' >> beam.Filter(filter_user))
 
-        merged_transactions = ((read_core, read_auth) | 'MergeTransactionsUsers' >> LeftJoin('id2', '_id'))
+        merged_transactions = ((read_core, read_auth) | 'MergeTransactionsUsers' >> LeftJoin('id2', 'id', 'user_'))
 
         write_transactions_cash_in = (merged_transactions
                                       | 'FilterCashIn' >> beam.Filter(filter_currency_operation, 'COP', 'USDv')
