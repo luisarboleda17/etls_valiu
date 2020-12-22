@@ -94,3 +94,35 @@ gcloud dataproc jobs submit pyspark etl_core_retentions_daily.py \
 
 _Reference: [Apache Spark official website](https://spark.apache.org/)_
 
+### Remittances Retentions ETL
+
+Use Apache Spark to read remittances movements data from remittances table such as remittances_movements, calculate daily retention rates from the first date in the table to the last one and insert this information into a table in the results dataset.
+
+**Example origin schema:**
+
+![Remittances Origin Example](./remittances_origin.png)
+
+**Example result schema:**
+
+![Remittances Result Example](./remittances_result.png)
+
+**Requeriments:**
+
+- A computer with good specifications and Python 3+ environment installed.
+- A Google Cloud account with BigQuery, Cloud Storage and Dataproc set.
+- Google Cloud CLI configured.
+
+To run the ETL script you must have access to your Google Cloud account, have datasets with correct schema, and run the following command:
+
+```bash
+cd /<ROOT>/etl_users_count/
+gcloud dataproc jobs submit pyspark etl_remittances_retentions_daily.py \
+  --cluster=<DATAPROC_CLUSTER_NAME> \
+  --region=<REGION_ID> \
+  --jars=gs://spark-lib/bigquery/spark-bigquery-latest_2.12.jar -- \
+  --project=<PROJECT_ID> \
+  --bucket=<TEMPORAL_BUCKET>
+```
+
+_Reference: [Apache Spark official website](https://spark.apache.org/)_
+
