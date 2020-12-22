@@ -1,0 +1,8 @@
+*.pyc
+*.pyo
+.idea/
+venv/
+bin/
+dist
+.DS_Store
+etl_operations.egg-info
