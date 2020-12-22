@@ -2,10 +2,11 @@ import apache_beam as beam
 
 
 class UnnestGroupedCollections(beam.DoFn):
-    def __init__(self, left_key: str, join_key: str):
+    def __init__(self, left_key: str, join_key: str, join_prefix: str = None):
         super().__init__()
         self.left_key = left_key
         self.join_key = join_key
+        self.join_prefix = join_prefix
 
     def process(self, input):
         key, value = input
@@ -14,16 +15,20 @@ class UnnestGroupedCollections(beam.DoFn):
 
         for value in left_coll:
             try:
-                yield value.update(join_coll[0])
+                join_value = join_coll[0]
+                if self.join_prefix:
+                    join_value = {f'{self.join_prefix}{key}': val for key, val in join_value.items()}
+                yield value.update(join_value)
             except IndexError:
                 yield value
 
 
 class LeftJoin(beam.PTransform):
-    def __init__(self, left_key: str, join_key: str):
+    def __init__(self, left_key: str, join_key: str, join_prefix: str = None):
         super().__init__()
         self.left_key = left_key
         self.join_key = join_key
+        self.join_prefix = join_prefix
 
     def expand(self, p):
         left_coll, join_coll = p

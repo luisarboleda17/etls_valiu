@@ -1,0 +1,27 @@
+[
+    {
+        "name": "date",
+        "type": "DATE",
+        "mode": "REQUIRED"
+    },
+    {
+        "name": "new_users",
+        "type": "INTEGER",
+        "mode": "REQUIRED"
+    },
+    {
+        "name": "total_users",
+        "type": "INTEGER",
+        "mode": "REQUIRED"
+    },
+    {
+        "name": "prev_total_users",
+        "type": "INTEGER",
+        "mode": "REQUIRED"
+    },
+    {
+        "name": "retention_rate",
+        "type": "NUMERIC",
+        "mode": "REQUIRED"
+    }
+]
