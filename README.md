@@ -5,6 +5,8 @@ This project consists of a series of ETLs (Extract, Transform, Load) to ingest t
 The following image shows the architecture diagram of the system that consists of the data sources databases, Google Dataflow, Cloud Storage, BigQuery, and the Tableu system.
 ![Architecture Diagram](./architecture_diagram.png)
 
+---
+
 ## Data Sources
 
 There are three different data sources from different transactional and authentication systems:
@@ -16,6 +18,8 @@ For simplicity, the SQL databases are deployed in Cloud SQL (Google Cloud) as fu
 
 You can find the scripts to create the required tables in each system in `/sql/` directory.
 
+---
+
 ## Data Warehouse
 
 **Google BigQuery** was selected as the default Data Warehouse solution for this project because it is robust, scalable, serverless, and does not require maintenance. This data warehouse is organized into five datasets to maintain proper recognition of data, scalability, and data lineage. 
@@ -23,6 +27,8 @@ You can find the scripts to create the required tables in each system in `/sql/`
 The first three datasets (core, auth, remittances) contains cleaned and transformed data directly from data sources. The processed dataset contains tables used for calculations, tables for testing queries, and tables created by users. the last dataset, results, contains curated information, already transformed, cleaned, and analyzed. It contains results from analytical models, experiments, etc., ready to be consumed.
 
 ![Warehouse Datasets](./warehouse_datasets.png)
+
+---
 
 ## Sources ETL
 This ETL uses Apache Beam to extract transactions from the core system, remittances from the remittances system, and users from authentication systems, to clean, transform, and insert into the data warehouse datasets.
@@ -59,6 +65,8 @@ GOOGLE_APPLICATION_CREDENTIALS=<CREDENTIALS_FILE> python main.py \
 ```
 
 _Reference: [Apache Beam official website](https://beam.apache.org/)_
+
+---
 
 ## Retentions ETLs
 These ETLs uses Apache Spark to extract data from raw data sources in the data warehouse (core, auth, and remittance systems), and calculate retention rates for cash-ins, cashouts, peer-to-peer, and remittances transactions, and insert it into BigQuery results tables.
@@ -126,3 +134,17 @@ gcloud dataproc jobs submit pyspark etl_remittances_retentions_daily.py \
 
 _Reference: [Apache Spark official website](https://spark.apache.org/)_
 
+---
+
+## Retention Rates Dashboard
+For this project, Tableu was selected as the default BI tool because is easy to use and provides good integration with BigQuery and Google Cloud.
+
+In the following image, you can see the graphs that represent the retention rates by day for cash-ins, cashouts, remittances, and peer-to-peer transactions. The retention rate is calculated by the following formula `(Total Users - New Users) / Previous Users ` with a time period of 1 day.
+![Retention Rates Dashboard](./retentions.png)
+
+For simplicity, the dashboard is not using live query, instead the data was extracted to avoid issues with Google account. You can see the complete dashboard at `/<ROOT>/retentions_rates_book.twb`
+
+---
+
+## Credits
+This project was developed and is maintained by Luis Arboleda. You can stay in touch at [hello@larboleda.io](mailto://hello@larboleda.io), follow me on Twitter at [@luis_arboleda17](https://twitter.com/luis_arboleda17) or LinkedIn at [Luis Arboleda](https://www.linkedin.com/in/luis-arboleda/).
